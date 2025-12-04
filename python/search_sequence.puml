@@ -1,0 +1,102 @@
+@startuml search_sequence.puml
+skinparam backgroundColor #FFFFFF
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 20
+skinparam maxmessagesize 60
+
+actor ユーザー as User
+participant "main()" as Main
+participant "JavaScriptFunctionExtractor" as Extractor
+participant "ファイルシステム" as FileSystem
+participant "正規表現エンジン" as Regex
+
+User -> Main: コマンド実行
+activate Main
+
+Main -> Main: 引数チェック
+
+alt 引数が不足している場合
+    Main -> User: 使用方法を表示して終了
+    deactivate Main
+else 引数が正しい場合
+    Main -> Extractor: new JavaScriptFunctionExtractor(file_path)
+    activate Extractor
+    note right of Extractor: ファイルパスを保存
+    
+    Main -> Extractor: extract()
+    
+    Extractor -> Extractor: read_file()
+    Extractor -> FileSystem: ファイルを開く
+    activate FileSystem
+    FileSystem -> Extractor: ファイル内容を返す
+    deactivate FileSystem
+    
+    alt ファイルが見つからない場合
+        Extractor -> User: エラーメッセージを表示
+        Extractor -> Main: sys.exit(1)
+    else ファイル読み込み成功
+        Extractor -> Extractor: self.contentに保存
+    end
+    
+    Extractor -> Extractor: extract_functions()
+    note right of Extractor: 正規表現パターンを定義
+    
+    loop 各パターンに対して
+        Extractor -> Regex: pattern.finditer(content)
+        activate Regex
+        Regex -> Extractor: マッチ結果を返す
+        deactivate Regex
+        
+        loop 各マッチ結果に対して
+            alt メソッドパターンの場合
+                Extractor -> Extractor: キーワードチェック
+                alt キーワードの場合
+                    Extractor -> Extractor: スキップ
+                else キーワードでない場合
+                    Extractor -> Extractor: 前後の文字列を確認
+                    alt メソッド定義でない場合
+                        Extractor -> Extractor: スキップ
+                    else メソッド定義の場合
+                        Extractor -> Extractor: 関数情報を抽出
+                    end
+                end
+            else その他のパターンの場合
+                Extractor -> Extractor: 関数情報を抽出
+            end
+            
+            Extractor -> Extractor: 引数を解析
+            Extractor -> Extractor: 行番号を計算
+            Extractor -> Extractor: 関数情報をリストに追加
+        end
+    end
+    
+    Extractor -> Extractor: 重複を除去
+    Extractor -> Main: functionsリストを返す
+    
+    alt CSVオプションが指定されている場合
+        Main -> Extractor: export_to_csv(functions, output_file)
+        Extractor -> Extractor: 出力ファイル名を決定
+        Extractor -> FileSystem: CSVファイルを開く
+        activate FileSystem
+        Extractor -> FileSystem: ヘッダー行を書き込み
+        loop 各関数に対して
+            Extractor -> FileSystem: データ行を書き込み
+        end
+        FileSystem -> Extractor: 完了
+        deactivate FileSystem
+        Extractor -> User: CSVファイルを出力しました
+    else JSONオプションが指定されている場合
+        Main -> Main: JSON形式で出力
+        Main -> User: JSONデータを表示
+    else 通常の表示
+        Main -> Extractor: print_results(functions)
+        loop 各関数に対して
+            Extractor -> User: 関数情報を表示
+        end
+    end
+    
+    deactivate Extractor
+    deactivate Main
+end
+
+@enduml
